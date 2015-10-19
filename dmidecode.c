@@ -58,6 +58,10 @@
  *    https://trustedcomputinggroup.org/pc-client-platform-tpm-profile-ptp-specification/
  */
 
+#if defined(__APPLE__)
+#include <Carbon/Carbon.h>
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -79,6 +83,7 @@ static const char *bad_index = "<BAD INDEX>";
 
 #define FLAG_NO_FILE_OFFSET     (1 << 0)
 #define FLAG_STOP_AT_EOT        (1 << 1)
+#define FLAG_READ_FROM_API      (1 << 2)
 
 #define SYS_FIRMWARE_DIR "/sys/firmware/dmi/tables"
 #define SYS_ENTRY_FILE SYS_FIRMWARE_DIR "/smbios_entry_point"
@@ -4709,7 +4714,7 @@ static void dmi_table_decode(u8 *buf, u32 len, u16 num, u16 ver, u32 flags)
 static void dmi_table(off_t base, u32 len, u16 num, u32 ver, const char *devmem,
 		      u32 flags)
 {
-	u8 *buf;
+	u8 *buf = NULL;
 
 	if (ver > SUPPORTED_SMBIOS_VER && !(opt.flags & FLAG_QUIET))
 	{
@@ -4727,7 +4732,7 @@ static void dmi_table(off_t base, u32 len, u16 num, u32 ver, const char *devmem,
 			if (num)
 				printf("%u structures occupying %u bytes.\n",
 				       num, len);
-			if (!(opt.flags & FLAG_FROM_DUMP))
+			if (!(flags & FLAG_READ_FROM_API) && !(opt.flags & FLAG_FROM_DUMP))
 				printf("Table at 0x%08llX.\n",
 				       (unsigned long long)base);
 		}
@@ -4757,6 +4762,55 @@ static void dmi_table(off_t base, u32 len, u16 num, u32 ver, const char *devmem,
 	}
 	else
 		buf = mem_chunk(base, len, devmem);
+
+#ifdef USE_API_CALLS
+	// read tables from API call
+	if (flags & FLAG_READ_FROM_API)
+	{
+#ifdef __APPLE__
+		mach_port_t				masterPort;
+		CFMutableDictionaryRef	properties = NULL;
+		io_service_t			service = MACH_PORT_NULL;
+		CFDataRef				dataRef;
+
+		IOMasterPort(MACH_PORT_NULL, &masterPort);
+		service = IOServiceGetMatchingService(masterPort, IOServiceMatching("AppleSMBIOS"));
+		if (service == MACH_PORT_NULL)
+		{
+			fprintf(stderr, "AppleSMBIOS service is unreachable, sorry.");
+			return;
+		}
+
+		IORegistryEntryCreateCFProperties(service,
+										  &properties,
+										  kCFAllocatorDefault,
+										  kNilOptions);
+
+		if (!CFDictionaryGetValueIfPresent(properties,
+									  CFSTR( "SMBIOS"),
+									  (const void **)&dataRef))
+		{
+			fprintf(stderr, "SMBIOS property data is unreachable, sorry.");
+			return;
+		}
+
+		len = CFDataGetLength(dataRef);
+		if((buf = malloc(sizeof(u8) * len)) == NULL)
+		{
+			perror("malloc");
+			return;
+		}
+
+		CFDataGetBytes(dataRef, CFRangeMake(0, len), (UInt8*)buf);
+
+		CFRelease(dataRef);
+		CFRelease(properties);
+		IOObjectRelease(service);
+#else
+#error "No API functions known for this platform"
+#endif
+	}
+#endif
 
 	if (buf == NULL)
 	{
@@ -5051,6 +5105,56 @@ int main(int argc, char * const argv[])
 		}
 		goto done;
 	}
+
+#if defined(__APPLE__)
+
+	mach_port_t		masterPort;
+	io_service_t	service = MACH_PORT_NULL;
+	CFDataRef		dataRef;
+
+	if (!(opt.flags & FLAG_QUIET))
+		printf("Getting SMBIOS data from Apple SMBIOS service.\n");
+
+	IOMasterPort(MACH_PORT_NULL, &masterPort);
+	service = IOServiceGetMatchingService(masterPort, IOServiceMatching("AppleSMBIOS"));
+	if (service == MACH_PORT_NULL) 
+	{
+		fprintf(stderr, "AppleSMBIOS service is unreachable, sorry.");
+		ret = 1;
+		goto exit_free;
+	}
+
+	dataRef = (CFDataRef) IORegistryEntryCreateCFProperty(service, 
+													  CFSTR("SMBIOS-EPS"), 
+													  kCFAllocatorDefault, 
+													  kNilOptions);
+
+	if (dataRef == NULL)
+	{
+		fprintf(stderr, "SMBIOS entry point is unreachable, sorry.");
+		ret = 1;
+		goto exit_free;
+	}
+
+	if((buf = malloc(0x20)) == NULL)
+	{
+		perror("malloc");
+		ret = 1;
+		goto exit_free;
+	}
+
+	CFDataGetBytes(dataRef, CFRangeMake(0, 0x20), (UInt8*)buf);
+
+	CFRelease(dataRef);
+	IOObjectRelease(service);
+
+	if (smbios_decode(buf, NULL, FLAG_READ_FROM_API))
+	{
+		found++;
+		goto done;
+	}
+
+#endif // __APPLE__
 
 	/*
 	 * First try reading from sysfs tables.  The entry point file could

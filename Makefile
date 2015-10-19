@@ -29,6 +29,10 @@ CFLAGS += -O2
 # Pass linker flags here
 LDFLAGS =
 
+ifeq ($(shell uname -s),Darwin)
+    LDFLAGS += -framework CoreServices -framework IOKit
+endif
+
 DESTDIR =
 prefix  = /usr/local
 sbindir = $(prefix)/sbin
