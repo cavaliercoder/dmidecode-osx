@@ -85,6 +85,13 @@
 	* dmidecode.c: Handle OEM-specific types in group associations
 	  (DMI type 14).
 
+2015-10-19  Ryan Armstrong <ryan@cavaliercoder.com>
+
+	* Makefile: Add LDFLAGS for linking to Apple system libraries.
+	* config.h: Add USE_API_CALLS macro for operating systems which do not
+	  expose raw memory using a file handle and instead require system calls.
+	* dmidecode.c: Add system calls required to read SMBIOS data on Apple OS X.
+
 2015-10-14  Jean Delvare  <jdelvare@suse.de>
 
 	* util.c: Avoid SIGBUS on mmap failure.
