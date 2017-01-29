@@ -4806,9 +4806,13 @@ static void dmi_table(off_t base, u32 len, u16 num, u32 ver, const char *devmem,
 		}
 
 		CFDataGetBytes(dataRef, CFRangeMake(0, len), (UInt8*)buf);
+		
+		if (NULL != dataRef)
+			CFRelease(dataRef);
 
-		CFRelease(dataRef);
-		CFRelease(properties);
+		if (NULL != properties)
+			CFRelease(properties);
+
 		IOObjectRelease(service);
 #else
 #error "No API functions known for this platform"
@@ -5135,7 +5139,7 @@ int main(int argc, char * const argv[])
 
 	if (dataRef == NULL)
 	{
-		fprintf(stderr, "SMBIOS entry point is unreachable, sorry.");
+		fprintf(stderr, "SMBIOS entry point is unreachable, sorry.\n");
 		ret = 1;
 		goto exit_free;
 	}
@@ -5149,7 +5153,8 @@ int main(int argc, char * const argv[])
 
 	CFDataGetBytes(dataRef, CFRangeMake(0, 0x20), (UInt8*)buf);
 
-	CFRelease(dataRef);
+	if (NULL != dataRef)
+		CFRelease(dataRef);
 	IOObjectRelease(service);
 
 	if (smbios_decode(buf, NULL, FLAG_READ_FROM_API))
