@@ -4551,20 +4551,24 @@ static void dmi_table(off_t base, u32 len, u16 num, u16 ver, const char *devmem,
 		service = IOServiceGetMatchingService(masterPort, IOServiceMatching("AppleSMBIOS"));
 		if (service == MACH_PORT_NULL)
 		{
-			fprintf(stderr, "AppleSMBIOS service is unreachable, sorry.");
+			fprintf(stderr, "AppleSMBIOS service is unreachable, sorry.\n");
 			return;
 		}
 
-		IORegistryEntryCreateCFProperties(service,
+		if (kIOReturnSuccess != IORegistryEntryCreateCFProperties(service,
 										  &properties,
 										  kCFAllocatorDefault,
-										  kNilOptions);
+										  kNilOptions))
+		{
+			fprintf(stderr, "No data in AppleSMBIOS IOService, sorry.\n");
+			return;
+		}
 		
 		if (!CFDictionaryGetValueIfPresent(properties,
 									  CFSTR( "SMBIOS"),
 									  (const void **)&dataRef))
 		{
-			fprintf(stderr, "SMBIOS property data is unreachable, sorry.");
+			fprintf(stderr, "SMBIOS property data is unreachable, sorry.\n");
 			return;
 		}
 
