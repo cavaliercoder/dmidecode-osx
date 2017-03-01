@@ -4810,8 +4810,13 @@ static void dmi_table(off_t base, u32 len, u16 num, u32 ver, const char *devmem,
 		if (NULL != dataRef)
 			CFRelease(dataRef);
 
-		if (NULL != properties)
-			CFRelease(properties);
+		// This CFRelease throws 'Segmentation fault: 11' on OS X 10.12, except
+		// when run as the child of a signed binary, like lldb.
+		//
+		// See: https://github.com/cavaliercoder/dmidecode-osx/issues/3
+		//
+		//if (NULL != properties)
+		//	CFRelease(properties);
 
 		IOObjectRelease(service);
 #else
