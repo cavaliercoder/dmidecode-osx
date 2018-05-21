@@ -4666,7 +4666,12 @@ static void dmi_table_decode(u8 *buf, u32 len, u16 num, u16 ver, u32 flags)
 		while ((unsigned long)(next - buf + 1) < len
 		    && (next[0] != 0 || next[1] != 0))
 			next++;
-		next += 2;
+
+		/* some apple devices have multiple pairs of padded zeroes */
+		while ((unsigned long)(next - buf + 1) < len
+			&& (next[0] == 0 && next[1] == 0))
+			next+=2;
+
 		if (display)
 		{
 			if ((unsigned long)(next - buf) <= len)
